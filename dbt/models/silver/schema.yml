@@ -1,0 +1,37 @@
+version: 2
+
+models:
+  - name: silver_orders_cleaned
+    columns:
+      - name: order_id
+        tests: [not_null, unique]
+      - name: user_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('silver_user_enrichment_cleaned')
+              field: user_id
+      - name: amount
+        tests: [not_null]
+      - name: status
+        tests: [not_null]
+
+  - name: silver_product_events_cleaned
+    columns:
+      - name: event_id
+        tests: [not_null, unique]
+      - name: user_id
+        tests: [not_null]
+      - name: product_id
+        tests: [not_null]
+      - name: price
+        tests: [not_null]
+
+  - name: silver_user_enrichment_cleaned
+    columns:
+      - name: user_id
+        tests: [not_null, unique]
+      - name: segment
+        tests: [not_null]
+      - name: ltv_score
+        tests: [not_null]

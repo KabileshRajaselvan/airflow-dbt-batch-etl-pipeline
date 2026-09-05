@@ -1,0 +1,20 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: user_enrichment
+        columns:
+          - name: user_id
+            tests: [not_null]
+          - name: as_of_date
+            tests: [not_null]
+      - name: orders
+        columns:
+          - name: order_id
+            tests: [not_null, unique]
+      - name: product_events
+        columns:
+          - name: event_id
+            tests: [not_null, unique]

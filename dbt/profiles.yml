@@ -1,0 +1,34 @@
+etl_pipeline:
+  target: "{{ env_var('DBT_TARGET', 'postgres') }}"
+  outputs:
+    postgres:
+      type: postgres
+      host: "{{ env_var('WAREHOUSE_DB_HOST', 'localhost') }}"
+      port: "{{ env_var('WAREHOUSE_DB_PORT', '5432') | as_number }}"
+      user: "{{ env_var('WAREHOUSE_DB_USER', 'warehouse') }}"
+      password: "{{ env_var('WAREHOUSE_DB_PASSWORD', 'warehouse') }}"
+      dbname: "{{ env_var('WAREHOUSE_DB_NAME', 'warehouse') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'public') }}"
+      threads: 4
+
+    # Documented but not live-tested (see README Design Decisions): the
+    # user chose local Postgres over a real cloud account for this demo.
+    # Swapping to a real warehouse is a `dbt run --target snowflake` away.
+    snowflake:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT', '') }}"
+      user: "{{ env_var('SNOWFLAKE_USER', '') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD', '') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'TRANSFORMER') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'ANALYTICS') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'TRANSFORMING') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'public') }}"
+      threads: 4
+
+    bigquery:
+      type: bigquery
+      method: service-account
+      project: "{{ env_var('BIGQUERY_PROJECT', '') }}"
+      dataset: "{{ env_var('DBT_SCHEMA', 'analytics') }}"
+      keyfile: "{{ env_var('BIGQUERY_KEYFILE', '/secrets/bigquery.json') }}"
+      threads: 4

@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r quality/requirements-dev.txt
+      - run: pytest quality/tests -v
+
+  extraction-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r extraction/requirements-dev.txt
+      - name: Unit tests (mocked API/S3, no Docker)
+        run: pytest extraction/tests -v -m "not integration"
+      - name: Integration tests (real Postgres + real PySpark JDBC via testcontainers)
+        run: pytest extraction/tests -v -m integration
+
+  dbt-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: warehouse
+          POSTGRES_USER: warehouse
+          POSTGRES_PASSWORD: warehouse
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      WAREHOUSE_DB_HOST: localhost
+      WAREHOUSE_DB_PORT: "5432"
+      WAREHOUSE_DB_NAME: warehouse
+      WAREHOUSE_DB_USER: warehouse
+      WAREHOUSE_DB_PASSWORD: warehouse
+      DBT_TARGET: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install dbt-core==1.8.2 dbt-postgres==1.8.2 psycopg2-binary==2.9.9
+      - name: Seed raw schema with synthetic data
+        run: python ci/seed_raw_for_ci.py
+      - name: dbt run
+        working-directory: dbt
+        run: dbt run --profiles-dir .
+      - name: dbt test
+        working-directory: dbt
+        run: dbt test --profiles-dir .
+
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r backend/requirements-dev.txt testcontainers==4.8.1
+      - run: pytest backend/tests -v
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+
+  dag-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install "apache-airflow==2.8.4" --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.8.4/constraints-3.11.txt"
+      - run: pip install pandas requests psycopg2-binary boto3
+      - name: Import the DAG with no errors
+        env:
+          AIRFLOW_HOME: /tmp/airflow
+        run: |
+          mkdir -p /tmp/airflow/dags
+          cp dags/etl_pipeline.py dags/publish_marts.py /tmp/airflow/dags/
+          PYTHONPATH="$PWD/extraction/src:$PWD/quality/src:/tmp/airflow/dags" python -c "
+          import sys
+          sys.path.insert(0, '/tmp/airflow/dags')
+          from airflow.models import DagBag
+          bag = DagBag(dag_folder='/tmp/airflow/dags', include_examples=False)
+          assert not bag.import_errors, bag.import_errors
+          assert 'etl_pipeline' in bag.dags
+          print('DAG imported cleanly:', list(bag.dags.keys()))
+          "
