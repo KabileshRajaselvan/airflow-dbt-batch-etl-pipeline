@@ -106,6 +106,13 @@ def load_source_to_raw(
         logger.warning("no rows extracted for %s on %s", table, run_date)
         return 0
 
+    # spark.createDataFrame(pandas_df, schema=explicit_schema) zips pandas
+    # columns against the schema's fields POSITIONALLY, not by name - it
+    # silently mismatches types if a column got added out of schema order
+    # (e.g. event_date, appended at the end of the DataFrame after the
+    # normalization step above, needs to land in its schema-declared slot
+    # between event_time and price, not after price).
+    pdf = pdf[schema.fieldNames()]
     sdf: DataFrame = spark.createDataFrame(pdf, schema=schema)
 
     try:
