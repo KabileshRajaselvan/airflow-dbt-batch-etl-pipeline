@@ -145,6 +145,12 @@ def combine_and_load(
 
     if not orders_pdf.empty:
         orders_pdf = orders_pdf.copy()
+        # order_date arrives as a real datetime.date from psycopg2/pd.read_sql
+        # against a Postgres DATE column in production, but normalizing it
+        # explicitly here (rather than trusting the source) also makes this
+        # robust to a plain ISO string, e.g. from a test fixture or a
+        # different DB driver.
+        orders_pdf["order_date"] = pd.to_datetime(orders_pdf["order_date"]).dt.date
         orders_pdf["created_at"] = pd.to_datetime(orders_pdf["created_at"], utc=True).dt.tz_localize(None)
         orders_pdf["amount"] = orders_pdf["amount"].apply(_to_decimal)
 
